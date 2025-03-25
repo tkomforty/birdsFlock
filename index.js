@@ -40,7 +40,7 @@ const flocks = [];
 let cloudMaterial;
 let cloudMesh;
 
-const NUM_FLOCKS = 10;
+const NUM_FLOCKS = 4;
 const BIRDS_PER_FLOCK = 4;
 // Fixed model URLs - changed from GitHub repository links to direct raw content URLs
 const MODELS = [
