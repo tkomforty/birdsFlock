@@ -44,18 +44,18 @@ let cloudMesh;
 
 // Performance Optimization Constants
 const NUM_FLOCKS = 5;        // Reduced from 25
-const BIRDS_PER_FLOCK = 2;   // Reduced from 4
+const BIRDS_PER_FLOCK = 4;   // Reduced from 4
 
 // Simplified flocking parameters to reduce calculations
 const SEPARATION_DISTANCE = 3;  // Smaller distance
-const COHESION_DISTANCE = 7;    // Reduced distance
-const ALIGNMENT_DISTANCE = 15;  // Reduced distance
+const COHESION_DISTANCE = 25;    // Reduced distance
+const ALIGNMENT_DISTANCE = 25;  // Reduced distance
 const SEPARATION_FORCE = 0.3;   // Reduced force
 const COHESION_FORCE = 0.005;   // Reduced force
 const ALIGNMENT_FORCE = 0.05;   // Reduced force
-const MAX_SPEED = 0.5;          // Slower max speed
-const WORLD_SIZE = 30;          // Smaller world size
-const TURN_FACTOR = 0.05;       // Reduced turn sensitivity
+const MAX_SPEED = 0.25;          // Slower max speed
+const WORLD_SIZE = 75;          // Smaller world size
+const TURN_FACTOR = 0.035;       // Reduced turn sensitivity
 
 // Direction the model faces in its original state
 // 1 means model faces +Z, -1 means model faces -Z
@@ -584,7 +584,7 @@ function createRenderer() {
     powerPreference: "low-power"  // Hint for mobile devices
   });
   renderer.setSize(container.clientWidth, container.clientHeight);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));  // Cap pixel ratio
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));  // Cap pixel ratio
   renderer.gammaFactor = 2.2;
   renderer.outputColorSpace = 'srgb';
 
