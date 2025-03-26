@@ -16,6 +16,8 @@ import {
   Mesh,
   BackSide,
   CanvasTexture,
+    MeshBasicMaterial, 
+  DoubleSide ,
 } from "three";
 import { MathUtils, Vector3, Matrix4 } from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -143,7 +145,7 @@ class Bird {
       this.model.rotateY(Math.PI); // Most common correction
     }
   }
-
+  
   applyForce(force) {
     this.acceleration.add(force);
   }
@@ -307,7 +309,7 @@ function init() {
   scene = new Scene();
 
   // Add denser fog with purple tint to match the gradient
-  scene.fog = new Fog(0x1a237e, 10, 10000);
+  scene.fog = new Fog(0x1a237e, 10, 100);
 
   createCamera();
   createLights();
@@ -328,7 +330,12 @@ function createCamera() {
   const near = 0.1;
   const far = 10000;
   camera = new PerspectiveCamera(fov, aspect, near, far);
-  camera.position.set(0,50,120);
+  
+  // Fixed central positioning with slight elevation
+  camera.position.set(0, 30, 200);
+  
+  // Optionally, set a fixed look-at point
+  camera.lookAt(0, 0, 0);
 }
 
 // Add gradient background function
@@ -374,19 +381,17 @@ function createLights() {
 }
 
 function createClouds() {
-  // Create a large dome for the clouds
-  const cloudGeometry = new PlaneGeometry(300, 300, 1, 1);
-
-  // Simplified cloud shader with less complex noise
-  const simplifiedCloudShader = {
+  // Cloud shader definition
+  const cloudShader = {
     uniforms: {
       time: { value: 0.0 },
       skyColor: { value: new Color(0x1a237e) },
       cloudColor: { value: new Color(0xffffff) },
-      cloudOpacity: { value: 0.4 }, // Reduced opacity
+      opacity: { value: 0.5 }
     },
     vertexShader: `
       varying vec2 vUv;
+      
       void main() {
         vUv = uv;
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
@@ -396,51 +401,114 @@ function createClouds() {
       uniform float time;
       uniform vec3 skyColor;
       uniform vec3 cloudColor;
-      uniform float cloudOpacity;
+      uniform float opacity;
+      
       varying vec2 vUv;
       
-      // Simplified noise function
-      float noise(vec2 p) {
-        return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+      // Pseudo-random hash function
+      vec2 hash(vec2 p) {
+        p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+        return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+      }
+      
+      // Improved Perlin noise
+      float perlin(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        
+        // Smooth Hermite interpolation
+        vec2 u = f * f * (3.0 - 2.0 * f);
+        
+        return mix(
+          mix(
+            dot(hash(i + vec2(0.0, 0.0)), f - vec2(0.0, 0.0)),
+            dot(hash(i + vec2(1.0, 0.0)), f - vec2(1.0, 0.0)), 
+            u.x
+          ),
+          mix(
+            dot(hash(i + vec2(0.0, 1.0)), f - vec2(0.0, 1.0)),
+            dot(hash(i + vec2(1.0, 1.0)), f - vec2(1.0, 1.0)), 
+            u.x
+          ), 
+          u.y
+        );
       }
       
       void main() {
-        vec2 uv = vUv * 2.0 - 1.0;
+        // Scale and animate UV coordinates
+        vec2 uv = vUv * 5.0;  // Adjust scale for cloud density
         
-        // Simplified cloud generation
-        float n1 = noise(uv + time * 0.1);
-        float n2 = noise(uv * 2.0 - time * 0.05);
+        // Layer multiple octaves of Perlin noise for more complex clouds
+        float noise = 0.0;
+        float amplitude = 0.5;
+        float frequency = 1.0;
         
-        float clouds = smoothstep(0.5, 0.7, (n1 + n2) * 0.5);
+        // 4 octaves of noise
+        for (int i = 0; i < 8; i++) {
+          noise += amplitude * perlin(frequency * (uv + time * 0.05));
+          amplitude *= 0.5;
+          frequency *= 2.0;
+        }
         
-        // Vertical gradient for cloud density
-        float verticalGradient = smoothstep(0.0, 0.8, (vUv.y * 1.2)); 
-        clouds *= verticalGradient;
+        // Normalize and threshold the noise
+        noise = (noise + 1.0) * 0.5;  // Remap from [-1,1] to [0,1]
         
-        // Mix cloud color with sky color
-        vec3 finalColor = mix(skyColor, cloudColor, clouds * cloudOpacity);
+        // Create soft cloud edges
+        float cloudThreshold = 0.55;  // Adjust for more/less cloud coverage
+        float cloudSoftness = 0.1;    // Soften cloud edges
+        float cloud = smoothstep(cloudThreshold - cloudSoftness, 
+                                 cloudThreshold + cloudSoftness, 
+                                 noise);
         
-        gl_FragColor = vec4(finalColor, clouds * cloudOpacity);
+        // Mix colors
+        vec3 finalColor = mix(skyColor, cloudColor, cloud);
+        
+        // Apply opacity
+        float cloudAlpha = cloud * opacity;
+        
+        gl_FragColor = vec4(finalColor, cloudAlpha);
       }
     `
   };
 
-  // Reduce number of cloud layers
-  cloudMaterial = new ShaderMaterial({
-    uniforms: simplifiedCloudShader.uniforms,
-    vertexShader: simplifiedCloudShader.vertexShader,
-    fragmentShader: simplifiedCloudShader.fragmentShader,
-    side: BackSide,
+  // Create cloud layer
+  const cloudGeometry = new PlaneGeometry(1000, 1000, 1, 1);
+  
+  const cloudMaterial = new ShaderMaterial({
+    uniforms: cloudShader.uniforms,
+    vertexShader: cloudShader.vertexShader,
+    fragmentShader: cloudShader.fragmentShader,
     transparent: true,
-    depthWrite: false,
+    side: BackSide
   });
 
-  // Only one cloud layer instead of multiple
-  cloudMesh = new Mesh(cloudGeometry, cloudMaterial);
-  cloudMesh.position.z = -100;
-  cloudMesh.rotation.z = 90;
-  cloudMesh.rotation.y = 180;
+  const cloudMesh = new Mesh(cloudGeometry, cloudMaterial);
+  
+  // Positioning 
+  cloudMesh.position.z = 50;  // Position between camera and scene center
+  cloudMesh.position.y =0;   // Keep centered vertically
+    cloudMesh.position.x =10;   // Keep centered vertically
+
+cloudMesh.rotation.x = 0;
+cloudMesh.rotation.y = Math.PI ; // Rotate 90 degrees around Y-axis
+  cloudMesh.rotation.z = 0;// 
+
+
+  
   scene.add(cloudMesh);
+
+  // Add to mixers for time-based updates
+  mixers.push({
+    update: (delta) => {
+      cloudMaterial.uniforms.time.value += delta;
+    }
+  });
+}
+
+function createControls() {
+  // Completely remove user interaction controls
+  // Camera will now be static
+  controls = null;
 }
 
 function createFlocks() {
@@ -526,26 +594,8 @@ function createRenderer() {
   createGradientBackground();
 }
 
-function createControls() {
-  // Fixed the missing "new" keyword and assignment to global controls variable
-  controls = new OrbitControls(camera, renderer.domElement);
-  
-  // Optional: configure controls
-  controls.enableDamping = true;
-  controls.dampingFactor = 0.05;
-  controls.screenSpacePanning = false;
-  controls.minDistance = 20;
-  controls.maxDistance = 100;
-  controls.maxPolarAngle = Math.PI / 2;
-}
-
 function update() {
   const delta = clock.getDelta();
-
-  // Update controls if damping is enabled
-  if (controls && controls.enableDamping) {
-    controls.update();
-  }
 
   // Update animation mixers and custom animator functions
   mixers.forEach((mixer) => {
@@ -559,15 +609,13 @@ function update() {
 
   // Update cloud shader time
   cloudTime += delta;
-  if (cloudMaterial) {
-    cloudMaterial.uniforms.time.value = cloudTime;
-  }
 }
 
 function render() {
   renderer.render(scene, camera);
 }
 
+// Initialize the scene
 init();
 
 function onWindowResize() {
@@ -578,6 +626,8 @@ function onWindowResize() {
 
   renderer.setSize(container.clientWidth, container.clientHeight);
 }
+
+// Add resize event listener
 window.addEventListener("resize", onWindowResize, false);
 
 // Optional: Performance monitoring function
